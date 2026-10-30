@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>موقعي</title>
+  <style>
+    /* ===== التنسيق (الشكل) ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+      gap: 20px;
+    }
+    h1 { font-size: 24px; font-weight: 700; }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%;
+      max-width: 440px;
+    }
+    .hint { color: #94a3b8; font-size: 15px; line-height: 1.7; }
+    button {
+      width: 100%;
+      margin-top: 16px;
+      padding: 16px;
+      font-size: 18px;
+      font-weight: 700;
+      font-family: inherit;
+      color: #0f172a;
+      background: #38bdf8;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    button:active { background: #0ea5e9; }
+    button.stop { background: #f87171; color: #450a0a; }
+    .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #334155; }
+    .row:last-child { border-bottom: none; }
+    .row .label { color: #94a3b8; }
+    .row .value { font-weight: 700; direction: ltr; }
+    #result { display: none; margin-top: 16px; }
+    #status { margin-top: 14px; font-size: 15px; min-height: 20px; }
+    .ok { color: #4ade80; }
+    .err { color: #f87171; }
+    .live { color: #38bdf8; }
+    #dot {
+      display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+      background: #4ade80; margin-left: 6px; vertical-align: middle;
+    }
+    @keyframes blink { 50% { opacity: 0.2; } }
+    #dot.on { animation: blink 1.2s infinite; }
+    iframe { width: 100%; height: 260px; border: none; border-radius: 12px; margin-top: 16px; display: none; }
+  </style>
+</head>
+<body>
+
+  <h1>📍 موقعي (لايف)</h1>
+
+  <div class="card">
+    <p class="hint">
+      هاي الصفحة رح تطلب إذن من المتصفّح عشان تتابع موقعك من الـ GPS بشكل مباشر.
+      لما تضغط "ابدأ البث"، التليفون رح يسألك إذا بتسمح — وانت حرّ توافق أو ترفض.
+      وبتقدر توقف البث بأي لحظة من زر "أوقف البث".
+    </p>
+
+    <button id="btn">ابدأ البث</button>
+
+    <div id="status"></div>
+
+    <div id="result">
+      <div class="row"><span class="label">الحالة</span><span class="value"><span id="dot"></span><span id="livetxt">—</span></span></div>
+      <div class="row"><span class="label">خط العرض (Latitude)</span><span class="value" id="lat">—</span></div>
+      <div class="row"><span class="label">خط الطول (Longitude)</span><span class="value" id="lng">—</span></div>
+      <div class="row"><span class="label">الدقّة التقريبية</span><span class="value" id="acc">—</span></div>
+      <div class="row"><span class="label">آخر تحديث</span><span class="value" id="time">—</span></div>
+      <div class="row"><span class="label">عدد التحديثات</span><span class="value" id="count">0</span></div>
+    </div>
+
+    <iframe id="map" title="الخريطة"></iframe>
+  </div>
+
+  <script>
+    // ===== البرمجة (المنطق) =====
+
+    const btn    = document.getElementById("btn");
+    const status = document.getElementById("status");
+    const result = document.getElementById("result");
+    const map    = document.getElementById("map");
+    const dot    = document.getElementById("dot");
+
+    let watchId = null;   // رقم المراقبة — بنستخدمه عشان نوقف البث لاحقاً
+    let count   = 0;      // عدّاد كم مرّة تحدّث الموقع
+
+    btn.addEventListener("click", () => {
+      // إذا البث شغّال، الضغطة بتوقّفه
+      if (watchId !== null) { stopWatching(); return; }
+
+      if (!navigator.geolocation) {
+        status.className = "err";
+        status.textContent = "متصفّحك ما بيدعم تحديد الموقع.";
+        return;
+      }
+
+      status.className = "";
+      status.textContent = "عم نطلب الموقع... وافق على طلب الإذن.";
+
+      // watchPosition: بدل لقطة وحدة، بيضلّه يراقب ويحدّث كل ما تتحرّك
+      watchId = navigator.geolocation.watchPosition(
+
+        // (1) كل تحديث للموقع بيوصل هون (أول مرّة + كل ما تتحرّك)
+        (pos) => {
+          count++;
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const acc = Math.round(pos.coords.accuracy);
+
+          document.getElementById("lat").textContent   = lat.toFixed(6);
+          document.getElementById("lng").textContent   = lng.toFixed(6);
+          document.getElementById("acc").textContent   = acc + " متر";
+          document.getElementById("count").textContent = count;
+          document.getElementById("time").textContent  = new Date().toLocaleTimeString("ar");
+          document.getElementById("livetxt").textContent = "البث شغّال";
+
+          result.style.display = "block";
+          dot.className = "on";
+          status.className = "live";
+          status.textContent = "📡 البث شغّال — الموقع بيتحدّث لحاله كل ما تتحرّك.";
+          btn.textContent = "أوقف البث";
+          btn.className = "stop";
+
+          // نحدّث الخريطة على آخر موقع
+          const d = 0.005;
+          const bbox = (lng - d) + "," + (lat - d) + "," + (lng + d) + "," + (lat + d);
+          map.src = "https://www.openstreetmap.org/export/embed.html?bbox="
+                    + bbox + "&marker=" + lat + "," + lng;
+          map.style.display = "block";
+        },
+
+        // (2) إذا صار خطأ
+        (error) => {
+          status.className = "err";
+          if (error.code === 1)      status.textContent = "رفضت إعطاء الإذن للموقع.";
+          else if (error.code === 2) status.textContent = "ما قدرنا نحدد الموقع (شغّل الـ GPS أو جرّب برّا).";
+          else                       status.textContent = "صار خطأ، جرّب مرّة ثانية.";
+          stopWatching();
+        },
+
+        // (3) إعدادات: دقّة عالية، وما نستخدم موقع قديم مخزّن
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    });
+
+    // دالة إيقاف البث
+    function stopWatching() {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);  // بيوقّف المراقبة
+        watchId = null;
+      }
+      dot.className = "";
+      document.getElementById("livetxt").textContent = "البث متوقّف";
+      status.className = "";
+      status.textContent = "⏸️ وقفت البث.";
+      btn.textContent = "ابدأ البث";
+      btn.className = "";
+    }
+  </script>
+
+</body>
+</html>
