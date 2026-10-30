@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>موقعي</title>
+  <style>
+    /* ===== التنسيق (الشكل) ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+      gap: 20px;
+    }
+    h1 { font-size: 24px; font-weight: 700; }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%;
+      max-width: 440px;
+    }
+    .hint { color: #94a3b8; font-size: 15px; line-height: 1.7; }
+    button {
+      width: 100%;
+      margin-top: 16px;
+      padding: 16px;
+      font-size: 18px;
+      font-weight: 700;
+      font-family: inherit;
+      color: #0f172a;
+      background: #38bdf8;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    button:active { background: #0ea5e9; }
+    .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #334155; }
+    .row:last-child { border-bottom: none; }
+    .row .label { color: #94a3b8; }
+    .row .value { font-weight: 700; direction: ltr; }
+    #result { display: none; margin-top: 16px; }
+    #status { margin-top: 14px; font-size: 15px; min-height: 20px; }
+    .ok { color: #4ade80; }
+    .err { color: #f87171; }
+    iframe { width: 100%; height: 260px; border: none; border-radius: 12px; margin-top: 16px; display: none; }
+  </style>
+</head>
+<body>
+
+  <h1>📍 موقعي</h1>
+
+  <div class="card">
+    <p class="hint">
+      هاي الصفحة رح تطلب إذن من المتصفّح عشان تقرا موقعك من الـ GPS.
+      لما تضغط الزر، التليفون رح يسألك إذا بتسمح — وانت حرّ توافق أو ترفض.
+      ما رح يتشارك موقعك مع حدا بهالخطوة، بس رح يظهر قدّامك على الشاشة.
+    </p>
+
+    <button id="btn">اعرض موقعي</button>
+
+    <div id="status"></div>
+
+    <div id="result">
+      <div class="row"><span class="label">خط العرض (Latitude)</span><span class="value" id="lat">—</span></div>
+      <div class="row"><span class="label">خط الطول (Longitude)</span><span class="value" id="lng">—</span></div>
+      <div class="row"><span class="label">الدقّة التقريبية</span><span class="value" id="acc">—</span></div>
+    </div>
+
+    <iframe id="map" title="الخريطة"></iframe>
+  </div>
+
+  <script>
+    // ===== البرمجة (المنطق) =====
+
+    // بنمسك العناصر من الصفحة عشان نتحكم فيها
+    const btn    = document.getElementById("btn");
+    const status = document.getElementById("status");
+    const result = document.getElementById("result");
+    const map    = document.getElementById("map");
+
+    // لما يضغط الزر، نشغّل هاي الدالة
+    btn.addEventListener("click", () => {
+
+      // أول إشي نتأكد إنه المتصفّح بيدعم تحديد الموقع
+      if (!navigator.geolocation) {
+        status.className = "err";
+        status.textContent = "متصفّحك ما بيدعم تحديد الموقع.";
+        return;
+      }
+
+      status.className = "";
+      status.textContent = "عم نطلب الموقع... وافق على طلب الإذن.";
+
+      // هون السحر: بنطلب الموقع من الـ GPS
+      navigator.geolocation.getCurrentPosition(
+
+        // (1) إذا نجح الطلب — بتوصلنا البيانات هون
+        (pos) => {
+          const lat = pos.coords.latitude;      // خط العرض
+          const lng = pos.coords.longitude;     // خط الطول
+          const acc = Math.round(pos.coords.accuracy); // الدقّة بالمتر
+
+          document.getElementById("lat").textContent = lat.toFixed(6);
+          document.getElementById("lng").textContent = lng.toFixed(6);
+          document.getElementById("acc").textContent = acc + " متر";
+
+          result.style.display = "block";
+          status.className = "ok";
+          status.textContent = "تم تحديد موقعك ✓";
+
+          // بنعرض نقطة الموقع على خريطة OpenStreetMap
+          const d = 0.01;
+          const bbox = (lng - d) + "," + (lat - d) + "," + (lng + d) + "," + (lat + d);
+          map.src = "https://www.openstreetmap.org/export/embed.html?bbox="
+                    + bbox + "&marker=" + lat + "," + lng;
+          map.style.display = "block";
+        },
+
+        // (2) إذا فشل الطلب — بنعرف ليش
+        (error) => {
+          status.className = "err";
+          if (error.code === 1)      status.textContent = "رفضت إعطاء الإذن للموقع.";
+          else if (error.code === 2) status.textContent = "ما قدرنا نحدد الموقع (جرّب برّا أو شغّل الـ GPS).";
+          else                       status.textContent = "صار خطأ، جرّب مرّة ثانية.";
+        },
+
+        // (3) إعدادات: نستخدم دقّة عالية (الـ GPS)
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  </script>
+
+</body>
+</html>
